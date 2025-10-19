@@ -1,11 +1,12 @@
-import { registerOTel } from '@vercel/otel'
-import { AzureMonitorTraceExporter } from '@azure/monitor-opentelemetry-exporter'
- 
-export function register() {
-  registerOTel({ 
-    serviceName: 'next-app',
-    traceExporter: new AzureMonitorTraceExporter({
-      connectionString: process.env.APPLICATIONINSIGHTS_CONNECTION_STRING || '',
-    }),
-  })
+import type { SpanExporter } from '@opentelemetry/sdk-trace-base';
+import { registerOTel } from '@vercel/otel';
+export async function register() {
+  let traceExporter: SpanExporter | undefined;
+  if (process.env.NEXT_RUNTIME === 'nodejs') {
+    const { AzureMonitorTraceExporter } = await import('@azure/monitor-opentelemetry-exporter');
+    traceExporter = new AzureMonitorTraceExporter({
+      connectionString: process.env.APPLICATIONINSIGHTS_CONNECTION_STRING
+    });
+  }
+  registerOTel({ serviceName: 'nextjs-weather', traceExporter });
 }
