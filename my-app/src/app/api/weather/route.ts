@@ -1,5 +1,20 @@
 import { NextResponse } from 'next/server';
 import logger from '@/lib/logger';
+import { context, trace } from '@opentelemetry/api';
+
+// Helper function to get current trace context for client correlation
+function getTraceContext() {
+  const span = trace.getSpan(context.active());
+  if (span) {
+    const spanContext = span.spanContext();
+    return {
+      operationId: spanContext.traceId,
+      operationParentId: spanContext.spanId,
+      operationName: 'POST /api/weather'
+    };
+  }
+  return null;
+}
 
 const ZIP_REGEX = /^[0-9]{5}$/;
 const BASE_URL = 'https://api.openweathermap.org/data/2.5/weather';
@@ -64,6 +79,8 @@ export async function POST(request: Request) {
       },
     });
 
+    logger.warn('WARNING weather service');
+    logger.error('ERROR weather service');
     logger.debug('Weather service responded');
     logger.debug(`Weather service status: ${response.status}`);
     logger.debug(`Weather service headers: ${JSON.stringify(Object.fromEntries(response.headers.entries()))}`);
@@ -89,11 +106,23 @@ export async function POST(request: Request) {
       windSpeed: data.wind?.speed,
     };
 
-    logger.info('=== Weather API Request Successful ===', { weatherData });
-    return NextResponse.json(weatherData);
-  } catch {
+    const traceContext = getTraceContext();
+    
+    logger.info('=== Weather API Request Successful ===', { weatherData, traceContext });
+    
+    return NextResponse.json({
+      ...weatherData,
+      _trace: traceContext // Include trace metadata for client correlation
+    });
+  } catch (error) {
+    const traceContext = getTraceContext();
+    logger.error('Weather API request failed', { error, traceContext });
+    
     return NextResponse.json(
-      { error: 'Unexpected error while contacting the weather service.' },
+      { 
+        error: 'Unexpected error while contacting the weather service.',
+        _trace: traceContext
+      },
       { status: 502 },
     );
   }

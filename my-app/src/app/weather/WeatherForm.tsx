@@ -1,6 +1,7 @@
 'use client';
 
 import { FormEvent, useState } from 'react';
+import clientLogger from '@/lib/clientLogger';
 
 type WeatherResponse = {
   location: string;
@@ -25,12 +26,20 @@ export default function WeatherForm() {
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
+    // Log form submission attempt
+    clientLogger.info('Weather form submission started', { zipCode: zip });
+    clientLogger.trackEvent('WeatherFormSubmitted', { zipCode: zip });
+
     if (!ZIP_PATTERN.test(zip)) {
-      setState({ status: 'error', message: 'Please enter a valid 5-digit ZIP code.' });
+      const errorMsg = 'Please enter a valid 5-digit ZIP code.';
+      clientLogger.warn('Form validation failed', { zipCode: zip, reason: 'invalid_format' });
+      clientLogger.trackEvent('WeatherFormValidationFailed', { zipCode: zip, reason: 'invalid_format' });
+      setState({ status: 'error', message: errorMsg });
       return;
     }
 
     setState({ status: 'loading' });
+    const requestStartTime = Date.now();
 
     try {
       const response = await fetch('/api/weather', {
@@ -41,19 +50,75 @@ export default function WeatherForm() {
         body: JSON.stringify({ zip }),
       });
 
-      console.log('API response status:', response.status);
+      const requestDuration = Date.now() - requestStartTime;
+      clientLogger.info('Weather API response received', { 
+        status: response.status, 
+        zipCode: zip,
+        duration: requestDuration
+      });
 
       if (!response.ok) {
         const errorBody = (await response.json().catch(() => null)) ?? {};
         const message = typeof errorBody.error === 'string' ? errorBody.error : 'Unable to fetch weather data.';
+        
+        // Extract trace context from error response
+        clientLogger.extractTraceFromResponse(errorBody);
+        
+        clientLogger.error('Weather API request failed', {
+          status: response.status,
+          zipCode: zip,
+          errorMessage: message,
+          duration: requestDuration
+        });
+        
+        clientLogger.trackEvent('WeatherAPIFailed', {
+          zipCode: zip,
+          status: response.status,
+          errorMessage: message,
+          duration: requestDuration
+        });
+        
         setState({ status: 'error', message });
         return;
       }
 
       const payload = (await response.json()) as WeatherResponse;
+      
+      // Extract and set trace context for correlation
+      clientLogger.extractTraceFromResponse(payload);
+      
+      clientLogger.info('Weather data received successfully', {
+        zipCode: zip,
+        location: payload.location,
+        temperature: payload.temperature,
+        duration: requestDuration
+      });
+      
+      clientLogger.trackEvent('WeatherAPISuccess', {
+        zipCode: zip,
+        location: payload.location,
+        temperature: payload.temperature,
+        duration: requestDuration
+      });
+      
       setState({ status: 'success', data: payload });
-    } catch {
-      setState({ status: 'error', message: 'Network error. Please try again.' });
+    } catch (error) {
+      const requestDuration = Date.now() - requestStartTime;
+      const errorMessage = 'Network error. Please try again.';
+      
+      clientLogger.error('Weather API network error', {
+        zipCode: zip,
+        error: error instanceof Error ? error.message : 'Unknown error',
+        duration: requestDuration
+      });
+      
+      clientLogger.trackException(error instanceof Error ? error : new Error('Network error'), {
+        zipCode: zip,
+        operation: 'weather_api_request',
+        duration: requestDuration
+      });
+      
+      setState({ status: 'error', message: errorMessage });
     }
   };
 
