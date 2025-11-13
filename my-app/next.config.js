@@ -1,9 +1,9 @@
 /** @type {import('next').NextConfig} */
-const config = {
+const nextConfig = {
+  reactStrictMode: true,
   experimental: {
     instrumentationHook: true,
   },
-  // other config
 };
 
-export default config;
+export default nextConfig;

@@ -41,6 +41,8 @@ export default function WeatherForm() {
         body: JSON.stringify({ zip }),
       });
 
+      console.log('API response status:', response.status);
+
       if (!response.ok) {
         const errorBody = (await response.json().catch(() => null)) ?? {};
         const message = typeof errorBody.error === 'string' ? errorBody.error : 'Unable to fetch weather data.';
