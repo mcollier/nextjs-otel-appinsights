@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import logger from '../../../lib/logger';
+import logger from '@/lib/logger';
 
 const ZIP_REGEX = /^[0-9]{5}$/;
 const BASE_URL = 'https://api.openweathermap.org/data/2.5/weather';
